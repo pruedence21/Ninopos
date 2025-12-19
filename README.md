@@ -1,90 +1,74 @@
-# Next.js Multi-Tenant Example
+# SaaS Petshop Management System - Setup Guide
 
-A production-ready example of a multi-tenant application built with Next.js 15, featuring custom subdomains for each tenant.
+## Prerequisites
 
-## Features
+1. **PostgreSQL Database**: Ensure you have a PostgreSQL database running
+2. **Midtrans Account**: Sign up at [Midtrans Sandbox](https://dashboard.sandbox.midtrans.com/)
+3. **Google OAuth**: Create OAuth credentials at [Google Cloud Console](https://console.cloud.google.com/)
 
-- ✅ Custom subdomain routing with Next.js middleware
-- ✅ Tenant-specific content and pages
-- ✅ Shared components and layouts across tenants
-- ✅ Redis for tenant data storage
-- ✅ Admin interface for managing tenants
-- ✅ Emoji support for tenant branding
-- ✅ Support for local development with subdomains
-- ✅ Compatible with Vercel preview deployments
+## Environment Setup
 
-## Tech Stack
+1. Copy `.env.example` to `.env.local`:
+```bash
+cp .env.example .env.local
+```
 
-- [Next.js 15](https://nextjs.org/) with App Router
-- [React 19](https://react.dev/)
-- [Upstash Redis](https://upstash.com/) for data storage
-- [Tailwind 4](https://tailwindcss.com/) for styling
-- [shadcn/ui](https://ui.shadcn.com/) for the design system
+2. Fill in the required environment variables:
+   - `DATABASE_URL`: Your PostgreSQL connection string
+   - `NEXTAUTH_SECRET`: Generate with `openssl rand -base64 32`
+   - `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`: From Google Cloud Console
+   - `MIDTRANS_SERVER_KEY` & `MIDTRANS_CLIENT_KEY`: From Midtrans Dashboard
 
-## Getting Started
+## Database Setup
 
-### Prerequisites
+1. Generate and push database schema:
+```bash
+bun run db:generate
+bun run db:push
+```
 
-- Node.js 18.17.0 or later
-- pnpm (recommended) or npm/yarn
-- Upstash Redis account (for production)
+2. Seed initial data (subscription plans):
+```bash
+bun run db:seed
+```
 
-### Installation
+## Development
 
-1. Clone the repository:
+1. Start the development server:
+```bash
+bun run dev
+```
 
-   ```bash
-   git clone https://github.com/vercel/platforms.git
-   cd platforms
-   ```
+2. Access the application:
+   - Main domain: `http://localhost:3000`
+   - Subdomain (after creating tenant): `http://yoursubdomain.localhost:3000`
 
-2. Install dependencies:
+## Wildcard DNS Setup (Production)
 
-   ```bash
-   pnpm install
-   ```
+For production deployment with true subdomains:
 
-3. Set up environment variables:
-   Create a `.env.local` file in the root directory with:
+1. Add wildcard DNS record:
+   - Type: `A` or `CNAME`
+   - Name: `*`
+   - Value: Your server IP or domain
 
-   ```
-   KV_REST_API_URL=your_redis_url
-   KV_REST_API_TOKEN=your_redis_token
-   ```
+2. Configure SSL certificate for wildcard domain (e.g., `*.yourapp.com`)
 
-4. Start the development server:
+## Testing Payment Flow
 
-   ```bash
-   pnpm dev
-   ```
+1. Use Midtrans sandbox test cards:
+   - **Success**: `4811 1111 1111 1114`
+   - **Failure**: `4911 1111 1111 1113`
+   - CVV: `123`, Expiry: any future date
 
-5. Access the application:
-   - Main site: http://localhost:3000
-   - Admin panel: http://localhost:3000/admin
-   - Tenants: http://[tenant-name].localhost:3000
+2. Configure webhook URL in Midtrans Dashboard:
+   - URL: `https://yourdomain.com/api/billing/webhook`
+   - For local testing, use ngrok or localtunnel
 
-## Multi-Tenant Architecture
+## User Flow
 
-This application demonstrates a subdomain-based multi-tenant architecture where:
-
-- Each tenant gets their own subdomain (`tenant.yourdomain.com`)
-- The middleware handles routing requests to the correct tenant
-- Tenant data is stored in Redis using a `subdomain:{name}` key pattern
-- The main domain hosts the landing page and admin interface
-- Subdomains are dynamically mapped to tenant-specific content
-
-The middleware (`middleware.ts`) intelligently detects subdomains across various environments (local development, production, and Vercel preview deployments).
-
-## Deployment
-
-This application is designed to be deployed on Vercel. To deploy:
-
-1. Push your repository to GitHub
-2. Connect your repository to Vercel
-3. Configure environment variables
-4. Deploy
-
-For custom domains, make sure to:
-
-1. Add your root domain to Vercel
-2. Set up a wildcard DNS record (`*.yourdomain.com`) on Vercel
+1. **Registration**: `/register` → Create account
+2. **Tenant Setup**: `/register/tenant` → Choose subdomain
+3. **Plan Selection**: `/register/plan` → Subscribe
+4. **Payment**: Midtrans Snap popup → Complete payment
+5. **Dashboard**: Redirect to `yoursubdomain.yourapp.com/dashboard`

@@ -1,59 +1,74 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { rootDomain } from '@/lib/utils';
-
-function extractSubdomain(request: NextRequest): string | null {
-  const url = request.url;
-  const host = request.headers.get('host') || '';
-  const hostname = host.split(':')[0];
-
-  // Local development environment
-  if (url.includes('localhost') || url.includes('127.0.0.1')) {
-    // Try to extract subdomain from the full URL
-    const fullUrlMatch = url.match(/http:\/\/([^.]+)\.localhost/);
-    if (fullUrlMatch && fullUrlMatch[1]) {
-      return fullUrlMatch[1];
-    }
-
-    // Fallback to host header approach
-    if (hostname.includes('.localhost')) {
-      return hostname.split('.')[0];
-    }
-
-    return null;
-  }
-
-  // Production environment
-  const rootDomainFormatted = rootDomain.split(':')[0];
-
-  // Handle preview deployment URLs (tenant---branch-name.vercel.app)
-  if (hostname.includes('---') && hostname.endsWith('.vercel.app')) {
-    const parts = hostname.split('---');
-    return parts.length > 0 ? parts[0] : null;
-  }
-
-  // Regular subdomain detection
-  const isSubdomain =
-    hostname !== rootDomainFormatted &&
-    hostname !== `www.${rootDomainFormatted}` &&
-    hostname.endsWith(`.${rootDomainFormatted}`);
-
-  return isSubdomain ? hostname.replace(`.${rootDomainFormatted}`, '') : null;
-}
+import { auth } from '@/auth';
+import { extractSubdomain } from '@/lib/tenant/subdomain';
+import { db } from '@/db';
+import { tenants } from '@/db/schema/admin';
+import { eq } from 'drizzle-orm';
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const subdomain = extractSubdomain(request);
+  const subdomain = extractSubdomain(request.headers.get('host') || '');
+
+  // Get session for auth check
+  const session = await auth();
+
+  // Public routes that don't require authentication
+  const publicRoutes = ['/login', '/register', '/api/auth'];
+  const isPublicRoute = publicRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
 
   if (subdomain) {
+    // Fetch tenant data from database
+    const tenant = await db.query.tenants.findFirst({
+      where: eq(tenants.subdomain, subdomain),
+    });
+
+    // If tenant doesn't exist, redirect to main domain
+    if (!tenant) {
+      const rootDomain = process.env.ROOT_DOMAIN || 'localhost:3000';
+      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+      return NextResponse.redirect(`${protocol}://${rootDomain}/404`);
+    }
+
+    // Check if tenant is active
+    if (tenant.status !== 'active') {
+      return NextResponse.redirect(
+        new URL('/suspended', request.url)
+      );
+    }
+
     // Block access to admin page from subdomains
     if (pathname.startsWith('/admin')) {
       return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // For the root path on a subdomain, rewrite to the subdomain page
-    if (pathname === '/') {
-      return NextResponse.rewrite(new URL(`/s/${subdomain}`, request.url));
+    // Require authentication for tenant routes (except public routes)
+    if (!session && !isPublicRoute) {
+      return NextResponse.redirect(new URL('/login', request.url));
     }
+
+    // Inject tenant context into headers for downstream use
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-tenant-id', tenant.id);
+    requestHeaders.set('x-tenant-subdomain', tenant.subdomain);
+    requestHeaders.set('x-tenant-name', tenant.name);
+
+    // For the root path on a subdomain, rewrite to the tenant dashboard
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL('/dashboard', request.url), {
+        request: {
+          headers: requestHeaders,
+        },
+      });
+    }
+
+    // Pass tenant context to all other routes
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
   }
 
   // On the root domain, allow normal access
@@ -68,6 +83,6 @@ export const config = {
      * 2. /_next (Next.js internals)
      * 3. all root files inside /public (e.g. /favicon.ico)
      */
-    '/((?!api|_next|[\\w-]+\\.\\w+).*)'
-  ]
+    '/((?!api|_next|[\\w-]+\\.\\w+).*)',
+  ],
 };
