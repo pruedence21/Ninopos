@@ -13,7 +13,12 @@ export async function proxy(request: NextRequest) {
   const session = await auth();
 
   // Public routes that don't require authentication
-  const publicRoutes = ['/login', '/register', '/api/auth'];
+  const publicRoutes = [
+    '/login',
+    '/register',
+    '/api/auth',
+    '/invitations/accept',
+  ];
   const isPublicRoute = publicRoutes.some((route) =>
     pathname.startsWith(route)
   );
@@ -33,9 +38,10 @@ export async function proxy(request: NextRequest) {
 
     // Check if tenant is active
     if (tenant.status !== 'active') {
-      return NextResponse.redirect(
-        new URL('/suspended', request.url)
-      );
+      // Allow access to login page even if suspended
+      if (!isPublicRoute) {
+        return NextResponse.redirect(new URL('/suspended', request.url));
+      }
     }
 
     // Block access to admin page from subdomains
@@ -45,7 +51,9 @@ export async function proxy(request: NextRequest) {
 
     // Require authentication for tenant routes (except public routes)
     if (!session && !isPublicRoute) {
-      return NextResponse.redirect(new URL('/login', request.url));
+      // Redirect to login on the same subdomain
+      const loginUrl = new URL('/login', request.url);
+      return NextResponse.redirect(loginUrl);
     }
 
     // Inject tenant context into headers for downstream use

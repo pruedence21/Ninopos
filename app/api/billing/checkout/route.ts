@@ -39,8 +39,11 @@ export async function POST(request: NextRequest) {
         // Create subscription and invoice
         const invoiceId = await createSubscription(tenantId, planId);
 
-        // Generate unique order ID
-        const orderId = `INV-${invoiceId}-${Date.now()}`;
+        // Generate unique order ID (max 50 chars for Midtrans)
+        // Format: INV-timestamp-random (e.g., INV-1734567890-abc123)
+        const timestamp = Date.now().toString();
+        const randomStr = Math.random().toString(36).substring(2, 8);
+        const orderId = `INV-${timestamp}-${randomStr}`;
 
         // Create payment transaction record
         await createPaymentTransaction(
@@ -59,7 +62,7 @@ export async function POST(request: NextRequest) {
             },
             itemDetails: [
                 {
-                    id: plan.id,
+                    id: 'PLAN-1', // Simple ID instead of UUID
                     name: `${plan.name} - ${plan.interval}`,
                     price: Number(plan.price),
                     quantity: 1,

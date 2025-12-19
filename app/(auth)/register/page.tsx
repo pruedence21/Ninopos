@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import { hashPassword } from '@/lib/auth/password';
 
 export default function RegisterPage() {
     const router = useRouter();
@@ -36,6 +36,7 @@ export default function RegisterPage() {
         setLoading(true);
 
         try {
+            // Register user
             const response = await fetch('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -50,6 +51,19 @@ export default function RegisterPage() {
 
             if (!response.ok) {
                 setError(data.error || 'Registration failed');
+                return;
+            }
+
+            // Auto-login after successful registration
+            const signInResult = await signIn('credentials', {
+                email: formData.email,
+                password: formData.password,
+                redirect: false,
+            });
+
+            if (signInResult?.error) {
+                setError('Registration successful but login failed. Please login manually.');
+                setTimeout(() => router.push('/login'), 2000);
                 return;
             }
 

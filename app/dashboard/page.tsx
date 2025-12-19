@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { getTenantFromHeaders } from '@/lib/tenant/server';
 import { getActiveSubscription } from '@/lib/billing/subscription';
 import { Card } from '@/components/ui/card';
@@ -14,8 +15,12 @@ export default async function DashboardPage() {
 
     const tenant = await getTenantFromHeaders();
 
+    // If no tenant context, this means we're not on a subdomain
+    // Redirect to main domain to select/create tenant
     if (!tenant) {
-        redirect('/register/tenant');
+        const rootDomain = process.env.ROOT_DOMAIN || 'localhost:3000';
+        const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+        redirect(`${protocol}://${rootDomain}/register/tenant`);
     }
 
     const subscription = await getActiveSubscription(tenant.tenantId);
@@ -71,12 +76,11 @@ export default async function DashboardPage() {
                             ) : (
                                 <>
                                     <p className="text-2xl font-bold text-red-600">Inactive</p>
-                                    <Button
-                                        className="mt-4"
-                                        onClick={() => (window.location.href = '/settings/billing')}
-                                    >
-                                        Subscribe Now
-                                    </Button>
+                                    <Link href="/settings/billing">
+                                        <Button className="mt-4">
+                                            Subscribe Now
+                                        </Button>
+                                    </Link>
                                 </>
                             )}
                         </div>
@@ -100,16 +104,19 @@ export default async function DashboardPage() {
                     <Card className="p-6">
                         <h3 className="text-sm font-medium text-gray-500">Settings</h3>
                         <div className="mt-4 space-y-2">
-                            <Button
-                                variant="outline"
-                                className="w-full justify-start"
-                                onClick={() => (window.location.href = '/settings/billing')}
-                            >
-                                Billing & Subscription
-                            </Button>
-                            <Button variant="outline" className="w-full justify-start">
-                                Team Members
-                            </Button>
+                            <Link href="/settings/billing" className="block">
+                                <Button
+                                    variant="outline"
+                                    className="w-full justify-start"
+                                >
+                                    Billing & Subscription
+                                </Button>
+                            </Link>
+                            <Link href="/settings/team" className="block">
+                                <Button variant="outline" className="w-full justify-start">
+                                    Team Members
+                                </Button>
+                            </Link>
                             <Button variant="outline" className="w-full justify-start">
                                 Business Settings
                             </Button>

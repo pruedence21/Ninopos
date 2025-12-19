@@ -19,10 +19,34 @@ export default function PlanSelectionPage() {
     const [plans, setPlans] = useState<Plan[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [snapLoaded, setSnapLoaded] = useState(false);
 
     useEffect(() => {
         fetchPlans();
+        loadMidtransScript();
     }, []);
+
+    const loadMidtransScript = () => {
+        // Check if script already loaded
+        // @ts-ignore
+        if (window.snap) {
+            setSnapLoaded(true);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://app.sandbox.midtrans.com/snap/snap.js';
+        script.setAttribute('data-client-key', process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY || '');
+        script.onload = () => {
+            setSnapLoaded(true);
+            console.log('Midtrans Snap loaded successfully');
+        };
+        script.onerror = () => {
+            console.error('Failed to load Midtrans Snap');
+            alert('Failed to load payment gateway. Please check your internet connection.');
+        };
+        document.body.appendChild(script);
+    };
 
     const fetchPlans = async () => {
         try {
@@ -37,8 +61,23 @@ export default function PlanSelectionPage() {
     };
 
     const handleSelectPlan = async (planId: string) => {
-        if (!tenantId) {
-            alert('Tenant ID missing');
+        // Check if Midtrans Snap is loaded
+        if (!snapLoaded) {
+            alert('Payment gateway is still loading. Please wait a moment and try again.');
+            return;
+        }
+
+        // Get tenantId from URL or localStorage
+        let currentTenantId = tenantId;
+
+        if (!currentTenantId) {
+            // Try to get from localStorage (set during tenant creation)
+            currentTenantId = localStorage.getItem('currentTenantId');
+        }
+
+        if (!currentTenantId) {
+            alert('Tenant ID missing. Please create a tenant first.');
+            window.location.href = '/register/tenant';
             return;
         }
 
@@ -49,7 +88,7 @@ export default function PlanSelectionPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tenantId,
+                    tenantId: currentTenantId,
                     planId,
                 }),
             });
@@ -58,32 +97,33 @@ export default function PlanSelectionPage() {
 
             if (!response.ok) {
                 alert(data.error || 'Failed to create checkout');
+                setProcessing(false);
                 return;
             }
 
-            // Load Midtrans Snap
+            // Open Midtrans Snap
             // @ts-ignore
-            if (window.snap) {
-                // @ts-ignore
-                window.snap.pay(data.token, {
-                    onSuccess: function () {
-                        window.location.href = '/dashboard';
-                    },
-                    onPending: function () {
-                        window.location.href = '/billing/pending';
-                    },
-                    onError: function () {
-                        alert('Payment failed');
-                    },
-                    onClose: function () {
-                        setProcessing(false);
-                    },
-                });
-            }
+            window.snap.pay(data.token, {
+                onSuccess: function () {
+                    // Clear tenant ID from localStorage
+                    localStorage.removeItem('currentTenantId');
+                    // Redirect to tenant subdomain
+                    window.location.href = '/dashboard';
+                },
+                onPending: function () {
+                    window.location.href = '/billing/pending';
+                },
+                onError: function () {
+                    alert('Payment failed');
+                    setProcessing(false);
+                },
+                onClose: function () {
+                    setProcessing(false);
+                },
+            });
         } catch (error) {
             console.error('Checkout error:', error);
             alert('An error occurred');
-        } finally {
             setProcessing(false);
         }
     };
@@ -97,53 +137,44 @@ export default function PlanSelectionPage() {
     }
 
     return (
-        <>
-            <script
-                src={`https://app.${process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === 'true'
-                        ? 'midtrans'
-                        : 'sandbox.midtrans'
-                    }.com/snap/snap.js`}
-                data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
-            />
-            <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-4">
-                <div className="mx-auto max-w-4xl py-12">
-                    <div className="mb-12 text-center">
-                        <h1 className="text-4xl font-bold text-gray-900">Choose Your Plan</h1>
-                        <p className="mt-3 text-lg text-gray-600">
-                            Select a subscription plan to get started
-                        </p>
-                    </div>
+        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-4">
+            <div className="mx-auto max-w-4xl py-12">
+                <div className="mb-12 text-center">
+                    <h1 className="text-4xl font-bold text-gray-900">Choose Your Plan</h1>
+                    <p className="mt-3 text-lg text-gray-600">
+                        Select a subscription plan to get started
+                    </p>
+                </div>
 
-                    <div className="grid gap-8 md:grid-cols-2">
-                        {plans.map((plan) => (
-                            <Card key={plan.id} className="p-8">
-                                <div className="mb-6">
-                                    <h3 className="text-2xl font-bold text-gray-900">{plan.name}</h3>
-                                    <div className="mt-4 flex items-baseline">
-                                        <span className="text-4xl font-bold">
-                                            Rp {Number(plan.price).toLocaleString('id-ID')}
-                                        </span>
-                                        <span className="ml-2 text-gray-500">
-                                            /{plan.interval === 'monthly' ? 'month' : 'year'}
-                                        </span>
-                                    </div>
-                                    {plan.description && (
-                                        <p className="mt-4 text-gray-600">{plan.description}</p>
-                                    )}
+                <div className="grid gap-8 md:grid-cols-2">
+                    {plans.map((plan) => (
+                        <Card key={plan.id} className="p-8">
+                            <div className="mb-6">
+                                <h3 className="text-2xl font-bold text-gray-900">{plan.name}</h3>
+                                <div className="mt-4 flex items-baseline">
+                                    <span className="text-4xl font-bold">
+                                        Rp {Number(plan.price).toLocaleString('id-ID')}
+                                    </span>
+                                    <span className="ml-2 text-gray-500">
+                                        /{plan.interval === 'monthly' ? 'month' : 'year'}
+                                    </span>
                                 </div>
+                                {plan.description && (
+                                    <p className="mt-4 text-gray-600">{plan.description}</p>
+                                )}
+                            </div>
 
-                                <Button
-                                    className="w-full"
-                                    onClick={() => handleSelectPlan(plan.id)}
-                                    disabled={processing}
-                                >
-                                    {processing ? 'Processing...' : 'Select Plan'}
-                                </Button>
-                            </Card>
-                        ))}
-                    </div>
+                            <Button
+                                className="w-full"
+                                onClick={() => handleSelectPlan(plan.id)}
+                                disabled={processing}
+                            >
+                                {processing ? 'Processing...' : 'Select Plan'}
+                            </Button>
+                        </Card>
+                    ))}
                 </div>
             </div>
-        </>
+        </div>
     );
 }

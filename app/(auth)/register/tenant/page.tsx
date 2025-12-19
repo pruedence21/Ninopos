@@ -84,6 +84,9 @@ export default function TenantRegistrationPage() {
                 return;
             }
 
+            // Save tenant ID to localStorage for plan selection
+            localStorage.setItem('currentTenantId', data.tenantId);
+
             // Redirect to plan selection
             router.push(`/register/plan?tenantId=${data.tenantId}`);
         } catch (err) {
