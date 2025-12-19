@@ -1,0 +1,562 @@
+name: Auto-Generate Documentation
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'app/**'
+      - 'lib/**'
+      - 'components/**'
+      - 'db/**'
+      - 'types/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_regenerate:
+        description: 'Force regenerate all documentation'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install dependencies
+        run: npm install -g @mintlify/scraping
+
+      - name: Create doc directory
+        run: mkdir -p doc
+
+      - name: Generate API Documentation
+        run: |
+          cat > doc/API.md << 'EOF'
+          # API Documentation
+          
+          Auto-generated API documentation for the SaaS Petshop Management System.
+          
+          ## Authentication APIs
+          
+          ### POST /api/auth/register
+          Register a new user account.
+          
+          **Request Body:**
+          \`\`\`json
+          {
+            "name": "string",
+            "email": "string",
+            "password": "string"
+          }
+          \`\`\`
+          
+          **Response:**
+          \`\`\`json
+          {
+            "success": true,
+            "userId": "uuid"
+          }
+          \`\`\`
+          
+          ---
+          
+          ## Tenant APIs
+          
+          ### POST /api/tenant/create
+          Create a new tenant with subdomain.
+          
+          **Request Body:**
+          \`\`\`json
+          {
+            "name": "string",
+            "subdomain": "string"
+          }
+          \`\`\`
+          
+          **Response:**
+          \`\`\`json
+          {
+            "success": true,
+            "tenantId": "uuid",
+            "subdomain": "string"
+          }
+          \`\`\`
+          
+          ### GET /api/tenant/check-subdomain
+          Check subdomain availability.
+          
+          **Query Parameters:**
+          - subdomain: string
+          
+          **Response:**
+          \`\`\`json
+          {
+            "available": boolean
+          }
+          \`\`\`
+          
+          ---
+          
+          ## Billing APIs
+          
+          ### GET /api/billing/plans
+          Get all active subscription plans.
+          
+          **Response:**
+          \`\`\`json
+          {
+            "plans": [
+              {
+                "id": "uuid",
+                "name": "string",
+                "price": "string",
+                "interval": "monthly" | "yearly",
+                "description": "string"
+              }
+            ]
+          }
+          \`\`\`
+          
+          ### POST /api/billing/checkout
+          Create Midtrans checkout session.
+          
+          **Request Body:**
+          \`\`\`json
+          {
+            "tenantId": "uuid",
+            "planId": "uuid"
+          }
+          \`\`\`
+          
+          **Response:**
+          \`\`\`json
+          {
+            "token": "string",
+            "redirectUrl": "string"
+          }
+          \`\`\`
+          
+          ### POST /api/billing/webhook
+          Midtrans payment webhook handler.
+          
+          **Request Body:** Midtrans notification payload
+          
+          ---
+          
+          ## Invitation APIs
+          
+          ### POST /api/invitations/send
+          Send team invitation email.
+          
+          **Request Body:**
+          \`\`\`json
+          {
+            "email": "string",
+            "role": "admin" | "staff"
+          }
+          \`\`\`
+          
+          **Response:**
+          \`\`\`json
+          {
+            "success": true,
+            "invitationId": "uuid"
+          }
+          \`\`\`
+          
+          ### POST /api/invitations/accept
+          Accept team invitation.
+          
+          **Request Body:**
+          \`\`\`json
+          {
+            "token": "string",
+            "name": "string",
+            "password": "string"
+          }
+          \`\`\`
+          
+          **Response:**
+          \`\`\`json
+          {
+            "success": true,
+            "tenantId": "uuid"
+          }
+          \`\`\`
+          
+          ### GET /api/invitations/[token]
+          Get invitation details by token.
+          
+          **Response:**
+          \`\`\`json
+          {
+            "email": "string",
+            "role": "string",
+            "tenantName": "string",
+            "inviterName": "string"
+          }
+          \`\`\`
+          
+          ---
+          
+          ## Team APIs
+          
+          ### DELETE /api/team/members/[id]
+          Remove team member.
+          
+          **Response:**
+          \`\`\`json
+          {
+            "success": true
+          }
+          \`\`\`
+          
+          ### GET /api/user/role
+          Get current user's role.
+          
+          **Response:**
+          \`\`\`json
+          {
+            "role": "owner" | "admin" | "staff"
+          }
+          \`\`\`
+          EOF
+
+      - name: Generate Database Schema Documentation
+        run: |
+          cat > doc/DATABASE.md << 'EOF'
+          # Database Schema Documentation
+          
+          ## Overview
+          
+          Multi-schema PostgreSQL database with two schemas:
+          - **admin**: Tenant and billing data
+          - **public**: User authentication and relationships
+          
+          ---
+          
+          ## Admin Schema
+          
+          ### tenants
+          Stores tenant/organization information.
+          
+          | Column | Type | Description |
+          |--------|------|-------------|
+          | id | uuid | Primary key |
+          | name | varchar | Business name |
+          | slug | varchar | URL-friendly identifier |
+          | subdomain | varchar | Unique subdomain |
+          | status | varchar | active/suspended/cancelled |
+          | created_at | timestamp | Creation timestamp |
+          | updated_at | timestamp | Last update timestamp |
+          
+          ### plans
+          Subscription plan definitions.
+          
+          | Column | Type | Description |
+          |--------|------|-------------|
+          | id | uuid | Primary key |
+          | name | varchar | Plan name |
+          | slug | varchar | URL-friendly identifier |
+          | price | decimal | Price in IDR |
+          | interval | varchar | monthly/yearly |
+          | description | text | Plan description |
+          | is_active | boolean | Plan availability |
+          
+          ### subscriptions
+          Active subscriptions linking tenants to plans.
+          
+          | Column | Type | Description |
+          |--------|------|-------------|
+          | id | uuid | Primary key |
+          | tenant_id | uuid | FK to tenants |
+          | plan_id | uuid | FK to plans |
+          | status | varchar | active/cancelled/expired |
+          | current_period_start | timestamp | Billing period start |
+          | current_period_end | timestamp | Billing period end |
+          | cancel_at_period_end | boolean | Auto-cancel flag |
+          | created_at | timestamp | Creation timestamp |
+          | updated_at | timestamp | Last update timestamp |
+          
+          ### invoices
+          Billing invoices.
+          
+          | Column | Type | Description |
+          |--------|------|-------------|
+          | id | uuid | Primary key |
+          | subscription_id | uuid | FK to subscriptions |
+          | amount | decimal | Invoice amount |
+          | status | varchar | pending/paid/failed |
+          | due_date | timestamp | Payment due date |
+          | paid_at | timestamp | Payment timestamp |
+          | created_at | timestamp | Creation timestamp |
+          
+          ### payment_transactions
+          Payment transaction records.
+          
+          | Column | Type | Description |
+          |--------|------|-------------|
+          | id | uuid | Primary key |
+          | invoice_id | uuid | FK to invoices |
+          | order_id | varchar | Midtrans order ID |
+          | transaction_id | varchar | Midtrans transaction ID |
+          | payment_type | varchar | Payment method |
+          | gross_amount | decimal | Total amount |
+          | transaction_status | varchar | Transaction status |
+          | transaction_time | timestamp | Transaction timestamp |
+          | settlement_time | timestamp | Settlement timestamp |
+          | fraud_status | varchar | Fraud check status |
+          | status_code | varchar | Status code |
+          | status_message | text | Status message |
+          | created_at | timestamp | Creation timestamp |
+          
+          ---
+          
+          ## Public Schema
+          
+          ### users
+          User accounts (Auth.js compatible).
+          
+          | Column | Type | Description |
+          |--------|------|-------------|
+          | id | uuid | Primary key |
+          | name | varchar | User full name |
+          | email | varchar | Unique email |
+          | email_verified | timestamp | Email verification |
+          | image | varchar | Profile image URL |
+          | password | varchar | Hashed password |
+          | created_at | timestamp | Creation timestamp |
+          | updated_at | timestamp | Last update timestamp |
+          
+          ### accounts
+          OAuth provider accounts (Auth.js).
+          
+          ### sessions
+          User sessions (Auth.js).
+          
+          ### verification_tokens
+          Email verification tokens (Auth.js).
+          
+          ### user_tenants
+          User-tenant relationships with roles.
+          
+          | Column | Type | Description |
+          |--------|------|-------------|
+          | id | uuid | Primary key |
+          | user_id | uuid | FK to users |
+          | tenant_id | uuid | FK to tenants (admin schema) |
+          | role | varchar | owner/admin/staff |
+          | created_at | timestamp | Join timestamp |
+          
+          ### invitations
+          Team invitation records.
+          
+          | Column | Type | Description |
+          |--------|------|-------------|
+          | id | uuid | Primary key |
+          | email | varchar | Invitee email |
+          | tenant_id | uuid | FK to tenants |
+          | role | varchar | Assigned role |
+          | invited_by | uuid | FK to users |
+          | token | varchar | Unique invitation token |
+          | expires_at | timestamp | Token expiry |
+          | accepted_at | timestamp | Acceptance timestamp |
+          | created_at | timestamp | Creation timestamp |
+          EOF
+
+      - name: Generate Architecture Documentation
+        run: |
+          cat > doc/ARCHITECTURE.md << 'EOF'
+          # System Architecture
+          
+          ## Overview
+          
+          SaaS Petshop Management System with multi-tenant architecture, subdomain routing, and subscription billing.
+          
+          ## Tech Stack
+          
+          - **Framework**: Next.js 16 (App Router)
+          - **Runtime**: Bun
+          - **Database**: PostgreSQL (multi-schema)
+          - **ORM**: Drizzle ORM
+          - **Authentication**: Auth.js (NextAuth v5)
+          - **Payment**: Midtrans
+          - **Email**: Resend
+          - **UI**: Tailwind CSS + shadcn/ui
+          
+          ## Architecture Layers
+          
+          ### 1. Routing Layer
+          
+          **Subdomain Routing** (`proxy.ts`):
+          - Extracts subdomain from hostname
+          - Validates tenant existence
+          - Injects tenant context into headers
+          - Enforces authentication
+          
+          **Routes**:
+          - Main domain: Registration, login
+          - Subdomain: Tenant-specific dashboard and features
+          
+          ### 2. Authentication Layer
+          
+          **Auth.js Configuration** (`auth.ts`):
+          - Credentials provider (email/password)
+          - Google OAuth provider
+          - Drizzle adapter for session storage
+          - Custom callbacks for user data
+          
+          ### 3. Multi-Tenancy Layer
+          
+          **Tenant Isolation**:
+          - Subdomain-based tenant identification
+          - Tenant context injection via middleware
+          - Row-level tenant filtering in queries
+          
+          **User-Tenant Relationships**:
+          - Many-to-many via `user_tenants` table
+          - Role-based access control (RBAC)
+          - Owner, Admin, Staff roles
+          
+          ### 4. RBAC Layer
+          
+          **Permission System** (`lib/rbac/`):
+          - Permission definitions per role
+          - Server-side middleware enforcement
+          - Client-side hooks for UI rendering
+          
+          **Roles**:
+          - **Owner**: Full access (billing, users, deletion)
+          - **Admin**: Operations (products, customers, invite staff)
+          - **Staff**: View-only + create transactions
+          
+          ### 5. Billing Layer
+          
+          **Subscription Management** (`lib/billing/`):
+          - Plan-based subscriptions
+          - Midtrans payment integration
+          - Invoice generation
+          - Webhook handling for payment events
+          
+          **Flow**:
+          1. User selects plan
+          2. Checkout creates subscription + invoice
+          3. Midtrans Snap handles payment
+          4. Webhook activates subscription
+          
+          ### 6. Invitation Layer
+          
+          **Team Invitations** (`lib/invitations/`):
+          - Token-based invitations (7-day expiry)
+          - Email delivery via Resend
+          - New user registration flow
+          - Existing user join flow
+          
+          ## Data Flow
+          
+          ### Registration Flow
+          1. User registers → Create account
+          2. Auto-login with credentials
+          3. Create tenant → Generate subdomain
+          4. Select plan → Initiate checkout
+          5. Payment → Activate subscription
+          6. Redirect to tenant dashboard
+          
+          ### Invitation Flow
+          1. Owner/Admin sends invitation
+          2. Email sent with token link
+          3. Recipient clicks link
+          4. New user: Register + join tenant
+          5. Existing user: Login + join tenant
+          
+          ## Security
+          
+          - Password hashing with bcrypt
+          - JWT session tokens
+          - CSRF protection (Auth.js)
+          - Subdomain validation
+          - Permission-based API access
+          - Webhook signature verification
+          
+          ## Scalability Considerations
+          
+          - Database connection pooling
+          - Multi-schema for data isolation
+          - Stateless authentication (JWT)
+          - CDN-ready static assets
+          - Horizontal scaling support
+          EOF
+
+      - name: Generate README
+        run: |
+          cat > doc/README.md << 'EOF'
+          # SaaS Petshop Management System - Documentation
+          
+          Welcome to the documentation for the SaaS Petshop Management System.
+          
+          ## Documentation Index
+          
+          - **[API Documentation](./API.md)** - Complete API reference
+          - **[Database Schema](./DATABASE.md)** - Database structure and relationships
+          - **[Architecture](./ARCHITECTURE.md)** - System design and architecture
+          - **[Setup Guide](../README.md)** - Installation and configuration
+          
+          ## Quick Links
+          
+          - [GitHub Repository](https://github.com/your-username/your-repo)
+          - [CI/CD Setup](./.github/CICD_SETUP.md)
+          - [Deployment Guide](./DEPLOYMENT.md)
+          
+          ## Features
+          
+          ✅ Multi-tenant SaaS architecture  
+          ✅ Subdomain routing  
+          ✅ Role-based access control (RBAC)  
+          ✅ Subscription billing with Midtrans  
+          ✅ Team collaboration with invitations  
+          ✅ Email notifications via Resend  
+          
+          ## Support
+          
+          For issues and questions, please open a GitHub issue.
+          EOF
+
+      - name: Commit documentation changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add doc/
+          git diff --staged --quiet || git commit -m "docs: Auto-generate documentation [skip ci]"
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '📚 Documentation has been automatically updated! Check the `doc/` folder for the latest API, database, and architecture docs.'
+            })

@@ -4,6 +4,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "lint": "next lint",
+    "test": "echo \"No tests yet\" && exit 0",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:seed": "dotenv -e .env.local -e .env.production -e .env -- tsx db/seed.ts"
